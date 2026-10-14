@@ -1,0 +1,27 @@
+{
+  "case_date": "2026-10-13",
+  "source_kind": "Previously captured independent ChatGPT audit responses from a local Web/API regression task",
+  "privacy": "Private repository, identifiers, full reports, source and runtime evidence are not distributed. Digests allow original holders to check source correspondence; they are not independent proof of browser execution.",
+  "records": [
+    {
+      "round": 1,
+      "verdict": "BLOCKED",
+      "audit_type": "INITIAL",
+      "original_response_sha256": "42aea430af5545afdeb77fa0fdc37ed6686099f6864edcd6046875176997c56a",
+      "original_response_bytes": 11656,
+      "published_excerpt": "round-01-excerpt.md",
+      "published_excerpt_sha256": "c112e542d3f5268fb241917f2c2fe080e5076ab3e8637a87c6218c19ec0a5440",
+      "selection": "Selected header fields and first three Executive Assessment sentences; remaining material omitted, no verdict rewritten."
+    },
+    {
+      "round": 2,
+      "verdict": "PASS",
+      "audit_type": "REMEDIATION_VERIFICATION",
+      "original_response_sha256": "fcf5e8055ab75d1d69656369b84a1c5a476c6ed86739ec28fe20f32a2ca33011",
+      "original_response_bytes": 11320,
+      "published_excerpt": "round-02-excerpt.md",
+      "published_excerpt_sha256": "8c92de0ebf93045423188ac3505f066013abc3b84dc7864d3d112d663f2fb8d1",
+      "selection": "Selected header fields and first three Executive Assessment sentences; remaining material omitted, no verdict rewritten."
+    }
+  ]
+}

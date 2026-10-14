@@ -1,0 +1,27 @@
+# Local audit evidence can contain private source, tasks, logs, and paths.
+.codex-audit/
+.codex-artifacts/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.cache/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+.env
+.env.*
+!.env.example
+.npmrc
+.pypirc
+credentials.json
+secrets.json
+*.pem
+*.key
+*.p12
+*.pfx
+dist/
+build/

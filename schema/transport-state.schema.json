@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local browser transport state",
+  "type": "object",
+  "required": [
+    "transport_state",
+    "browser_transport",
+    "external_browser_used",
+    "user_approved",
+    "transport_fallback_reason",
+    "upload_method",
+    "native_file_dialog_used",
+    "bundle_path",
+    "expected_bundle_filename",
+    "handoff_id",
+    "round",
+    "uploaded_filename",
+    "upload_verified",
+    "downloaded_path",
+    "download_verified",
+    "conversation_policy"
+  ],
+  "properties": {
+    "transport_state": {
+      "enum": [
+        "HANDOFF_READY",
+        "OPENING_IN_APP_BROWSER",
+        "CHATGPT_READY",
+        "OPENING_ATTACHMENT_CONTROL",
+        "SELECTING_HANDOFF_FILE",
+        "FILE_UPLOAD_IN_PROGRESS",
+        "FILE_ATTACHED",
+        "SUBMITTING_REQUEST",
+        "WAITING_FOR_CHATGPT",
+        "WAITING_FOR_AUDIT_RESPONSE",
+        "WAITING_FOR_AUDIT_ARTIFACT",
+        "RESPONSE_AND_ARTIFACT_READY",
+        "DOWNLOADING_ARTIFACT",
+        "TRANSPORT_FAILED"
+      ]
+    },
+    "browser_transport": {"enum": ["CODEX_IN_APP_BROWSER", "EXTERNAL_BROWSER_FALLBACK"]},
+    "external_browser_used": {"type": "boolean"},
+    "user_approved": {"type": "boolean"},
+    "transport_fallback_reason": {"type": ["string", "null"]},
+    "upload_method": {"const": "IN_APP_ATTACHMENT"},
+    "native_file_dialog_used": {"type": "boolean"},
+    "bundle_path": {"type": "string", "minLength": 1},
+    "expected_bundle_filename": {"type": "string", "minLength": 1},
+    "handoff_id": {"type": "string", "minLength": 1},
+    "round": {"type": "integer", "minimum": 1},
+    "uploaded_filename": {"type": ["string", "null"]},
+    "upload_verified": {"type": "boolean"},
+    "downloaded_path": {"type": ["string", "null"]},
+    "download_verified": {"type": "boolean"},
+    "conversation_policy": {"type": "string"},
+    "remediation_phase": {"type": "string"},
+    "phase_history": {"type": "array", "items": {"type": "string"}},
+    "findings_frozen": {"type": "boolean"},
+    "frozen_response_sha256": {"type": ["string", "null"]},
+    "frozen_finding_ids": {"type": "array", "items": {"type": "string"}},
+    "master_prompt_required": {"type": "boolean"},
+    "local_remediation_allowed": {"type": "boolean"},
+    "master_prompt_id": {"type": ["string", "null"]},
+    "source_audit_subject_id": {"type": ["string", "null"]},
+    "source_audit_response_hash": {"type": ["string", "null"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"browser_transport": {"const": "EXTERNAL_BROWSER_FALLBACK"}}},
+      "then": {
+        "properties": {
+          "external_browser_used": {"const": true},
+          "user_approved": {"const": true},
+          "transport_fallback_reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"browser_transport": {"const": "CODEX_IN_APP_BROWSER"}}},
+      "then": {
+        "properties": {
+          "external_browser_used": {"const": false},
+          "user_approved": {"const": false},
+          "transport_fallback_reason": {"type": "null"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}

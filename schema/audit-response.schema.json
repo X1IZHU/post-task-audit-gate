@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Post-task ChatGPT audit response",
+  "type": "object",
+  "required": [
+    "audit_protocol_version",
+    "handoff_id",
+    "round",
+    "audit_type",
+    "audit_subject_id",
+    "verdict"
+  ],
+  "properties": {
+    "audit_protocol_version": {"const": 1},
+    "handoff_id": {"type": "string", "minLength": 1},
+    "round": {"type": "integer", "minimum": 1},
+    "audit_type": {
+      "enum": ["INITIAL", "REMEDIATION_VERIFICATION", "XHS_USER_PANEL_REVIEW", "XHS_USER_PANEL_REMEDIATION_VERIFICATION"]
+    },
+    "audit_subject_id": {"type": "string", "minLength": 1},
+    "verdict": {
+      "enum": ["PASS", "PASS_WITH_NOTES", "FAIL", "BLOCKED"]
+    },
+    "goal_status": {"enum": ["GOAL_REACHED", "ITERATION_REQUIRED", "MORE_EVIDENCE_REQUIRED", "USER_DECISION_REQUIRED", "BLOCKED"]},
+    "natural_user_voice_panel": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "previous_finding_closure": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "evidence"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^PTA-[0-9]{3,}$"},
+          "status": {
+            "enum": ["CLOSED", "OPEN", "PARTIALLY_CLOSED", "DISPUTED_BUT_UNRESOLVED"]
+          },
+          "evidence": {"type": "string"}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "title", "status", "evidence"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^PTA-[0-9]{3,}$"},
+          "severity": {"enum": ["BLOCKER", "HIGH", "MEDIUM", "LOW"]},
+          "title": {"type": "string"},
+          "status": {"enum": ["OPEN", "CLOSED"]},
+          "evidence": {"type": "string"},
+          "requirement": {"type": "string"},
+          "root_cause": {"type": "string"},
+          "impact": {"type": "string"},
+          "remediation_objective": {"type": "string"},
+          "likely_targets": {"type": "array", "items": {"type": "string"}},
+          "implementation_guidance": {"type": "array", "items": {"type": "string"}},
+          "constraints": {"type": "array", "items": {"type": "string"}},
+          "verification_steps": {"type": "array", "items": {"type": "string"}},
+          "closure_condition": {"type": "string"},
+          "regression_risks": {"type": "array", "items": {"type": "string"}},
+          "depends_on": {"type": "array", "items": {"type": "string", "pattern": "^PTA-[0-9]{3,}$"}}
+        }
+      }
+    },
+    "evidence_requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "required_evidence", "evidence_type", "reason", "task_critical"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^ER-[0-9]{3,}$"},
+          "required_evidence": {"type": "array", "items": {"type": "string"}},
+          "evidence_type": {"enum": ["FULL_FILE", "BEFORE_AND_AFTER", "SEARCH_RESULTS", "REFERENCES", "CONFIG", "SCHEMA", "MIGRATION", "TEST_FILE", "RAW_TEST_OUTPUT", "PACKAGE_MANIFEST", "DIRECTORY_LISTING", "OTHER"]},
+          "reason": {"type": "string"},
+          "task_critical": {"type": "boolean"}
+        }
+      }
+    },
+    "remediation_plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "action", "priority", "objective", "steps", "verify"],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^PTA-[0-9]{3,}$"},
+          "action": {"enum": ["MODIFY", "ADD_TEST", "REQUEST_EVIDENCE", "USER_DECISION_REQUIRED", "DESIGN_DECISION_REQUIRED"]},
+          "priority": {"enum": ["BLOCKER", "HIGH", "MEDIUM", "LOW"]},
+          "classification": {"enum": ["REQUIRED", "RECOMMENDED", "OPTIONAL"]},
+          "depends_on": {"type": "array", "items": {"type": "string", "pattern": "^PTA-[0-9]{3,}$"}},
+          "targets": {"type": "array", "items": {"type": "string"}},
+          "objective": {"type": "string"},
+          "steps": {"type": "array", "items": {"type": "string"}},
+          "verify": {"type": "array", "items": {"type": "string"}},
+          "do_not": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "remediation_execution_pack": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "finding_id",
+          "execution_mode",
+          "command_status",
+          "low_capability_execution_prompt",
+          "report_required"
+        ],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^PTA-[0-9]{3,}$"},
+          "execution_mode": {"enum": ["GUIDED", "NORMAL"]},
+          "command_status": {
+            "enum": ["READY", "NO_SAFE_COMMAND", "USER_DECISION_REQUIRED", "DESIGN_DECISION_REQUIRED"]
+          },
+          "low_capability_execution_prompt": {"type": "string", "minLength": 40},
+          "report_required": {"const": true},
+          "stop_reason": {"type": "string"},
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "purpose",
+                "working_directory",
+                "command_class",
+                "execution_policy",
+                "preconditions",
+                "command",
+                "expected_result",
+                "on_failure"
+              ],
+              "properties": {
+                "id": {"type": "string", "pattern": "^CMD-[0-9]{3,}$"},
+                "purpose": {"type": "string", "minLength": 1},
+                "working_directory": {"type": "string", "minLength": 1},
+                "command_class": {"enum": ["SAFE_READ", "SAFE_TEST", "SAFE_BUILD", "MODIFYING"]},
+                "execution_policy": {"enum": ["AUTO", "VERIFY_THEN_RUN"]},
+                "preconditions": {"type": "string", "minLength": 1},
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Exact command; READY commands must pass the fail-closed capability classifier in scripts/validate_audit_response.py. Unknown, opaque, indirect, chained, redirected, wrapper, interpreter, remote-mutation, and publish/release/deploy semantics are not executable."
+                },
+                "expected_result": {"type": "string", "minLength": 1},
+                "on_failure": {"type": "string", "minLength": 1}
+              },
+              "allOf": [
+                {
+                  "if": {"properties": {"execution_policy": {"const": "AUTO"}}},
+                  "then": {"properties": {"command_class": {"enum": ["SAFE_READ", "SAFE_TEST", "SAFE_BUILD"]}}}
+                },
+                {
+                  "if": {"properties": {"command_class": {"const": "MODIFYING"}}},
+                  "then": {"properties": {"execution_policy": {"const": "VERIFY_THEN_RUN"}}}
+                }
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"command_status": {"const": "READY"}}},
+            "then": {"properties": {"commands": {"minItems": 1}}, "required": ["commands"]},
+            "else": {"required": ["stop_reason"]}
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+    ,"remediation_architecture": {
+      "type": "object",
+      "required": [
+        "findings_frozen",
+        "cross_finding_analysis",
+        "root_cause_analysis",
+        "remediation_order",
+        "regression_analysis",
+        "architecture_constraint_analysis",
+        "test_matrix",
+        "master_prompt_ready"
+      ],
+      "properties": {
+        "findings_frozen": {"const": true},
+        "cross_finding_analysis": {"const": "COMPLETE"},
+        "root_cause_analysis": {"const": "COMPLETE"},
+        "remediation_order": {"const": "COMPLETE"},
+        "regression_analysis": {"const": "COMPLETE"},
+        "architecture_constraint_analysis": {"const": "COMPLETE"},
+        "test_matrix": {"const": "COMPLETE"},
+        "master_prompt_ready": {"type": "boolean"},
+        "master_prompt_artifact": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"audit_type": {"enum": ["XHS_USER_PANEL_REVIEW", "XHS_USER_PANEL_REMEDIATION_VERIFICATION"]}}},
+      "then": {"required": ["inferred_primary_intent", "audience_clarity", "self_selected_personas", "what_works", "what_does_not_work", "biggest_strength", "biggest_failure", "image_review", "codex_remediation_prompt"]}
+    },
+    {
+      "if": {"properties": {"verdict": {"enum": ["FAIL", "PASS_WITH_NOTES"]}}},
+      "then": {"required": ["remediation_execution_pack"]}
+    }
+  ],
+  "definitions": {
+    "xhs_finding": {"type": "object", "required": ["finding_id", "priority", "problem", "user_impact", "evidence", "remediation_direction"], "properties": {"finding_id": {"pattern": "^XHS-[0-9]{3,}$", "type": "string"}, "priority": {"enum": ["P0", "P1", "P2", "P3"]}, "problem": {"type": "string"}, "user_impact": {"type": "string"}, "evidence": {"type": "string"}, "remediation_direction": {"type": "string"}}},
+    "xhs_persona": {"type": "object", "required": ["persona_name", "why_this_persona_is_relevant"], "properties": {"persona_name": {"type": "string"}, "why_this_persona_is_relevant": {"type": "string"}}}
+  }
+}
