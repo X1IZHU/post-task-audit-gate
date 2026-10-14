@@ -30,17 +30,17 @@ AI 编程 Agent 说“完成了”，并不代表需求、实际执行路径和�
 
 ```mermaid
 flowchart TD
-    A[读取 Skill 并确认本阶段启用审计] --> B[记录任务与基线]
-    B --> C[Codex 实现并自检]
-    C --> D[打包并检查安全证据]
-    D --> E[Agent 通过内置浏览器提交 ChatGPT]
-    E --> F[捕获完整回复并验证身份与格式]
+    A["读取 Skill 并确认本阶段启用审计"] --> B["记录任务与基线"]
+    B --> C["Codex 实现并自检"]
+    C --> D["打包并检查安全证据"]
+    D --> E["Agent 通过内置浏览器提交 ChatGPT"]
+    E --> F["捕获完整回复并验证身份与格式"]
     F --> G{审计结果}
-    G -->|PASS| H[检查状态未变化后完成]
-    G -->|FAIL / PASS_WITH_NOTES| I[冻结问题与验证独立整改计划]
-    I --> J[Codex 按原任务授权检查、修复、自检]
+    G -->|PASS| H["检查状态未变化后完成"]
+    G -->|"FAIL / PASS_WITH_NOTES"| I["冻结问题与验证独立整改计划"]
+    I --> J["Codex 按原任务授权检查、修复、自检"]
     J --> D
-    G -->|BLOCKED| K[补充证据]
+    G -->|BLOCKED| K["补充证据"]
     K --> D
 ```
 

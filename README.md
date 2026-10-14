@@ -33,17 +33,17 @@ Its success means ready for user review, never permission to publish.
 
 ```mermaid
 flowchart TD
-    A[Read skill and enable audit for this phase] --> B[Record task and baseline]
-    B --> C[Codex implements and self-checks]
-    C --> D[Build and inspect safe evidence bundle]
-    D --> E[Agent submits to ChatGPT through in-app browser]
-    E --> F[Capture final response and validate identity and format]
+    A["Read skill and enable audit for this phase"] --> B["Record task and baseline"]
+    B --> C["Codex implements and self-checks"]
+    C --> D["Build and inspect safe evidence bundle"]
+    D --> E["Agent submits to ChatGPT through in-app browser"]
+    E --> F["Capture final response and validate identity and format"]
     F --> G{Verdict}
-    G -->|PASS| H[Check state is current and finish]
-    G -->|FAIL / PASS_WITH_NOTES| I[Freeze findings and validate independent remediation plan]
-    I --> J[Codex inspects, fixes, and tests under task authorization]
+    G -->|PASS| H["Check state is current and finish"]
+    G -->|"FAIL / PASS_WITH_NOTES"| I["Freeze findings and validate independent remediation plan"]
+    I --> J["Codex inspects, fixes, and tests under task authorization"]
     J --> D
-    G -->|BLOCKED| K[Expand evidence]
+    G -->|BLOCKED| K["Expand evidence"]
     K --> D
 ```
 
