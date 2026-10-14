@@ -26,9 +26,6 @@ OpenAI. The installation and invocation identifier remains `post-task-chatgpt-au
 - **Independent closure:** Codex can fix or dispute findings; the auditor decides whether they are closed.
 - **Fail-closed checks:** wrong identities, stale state, pending attachments, and invalid responses cannot satisfy completion.
 
-An existing Xiaohongshu user-panel review profile is also included; see [SKILL.md](SKILL.md).
-Its success means ready for user review, never permission to publish.
-
 ## How it works
 
 ```mermaid
