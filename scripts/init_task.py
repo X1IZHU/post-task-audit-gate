@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse, datetime as dt, json, os, pathlib, subprocess, uuid
 
 from audit_integrity import context_identity, task_spec_manifest
+from git_evidence import format_status, read_status
 
 
 def run(cmd, cwd):
     try:
-        p = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, check=False)
+        p = subprocess.run(cmd, cwd=cwd, text=True, encoding="utf-8", errors="replace", capture_output=True, check=False)
         return p.returncode, p.stdout, p.stderr
     except Exception as e:
         return 127, "", str(e)
@@ -19,6 +20,9 @@ def main():
     ap.add_argument("--task-file", required=True, help="UTF-8 file containing the original task")
     ap.add_argument("--task-transcript", help="Optional authoritative task transcript")
     ap.add_argument("--task-id", default=None)
+    ap.add_argument("--baseline-quality", default="UNKNOWN",
+                    choices=("UNKNOWN", "EARLY_INITIALIZATION", "LATE_INITIALIZATION"),
+                    help="Declare when the baseline was captured; dirty status alone cannot establish this")
     args = ap.parse_args()
 
     repo = pathlib.Path(args.repo).resolve()
@@ -33,7 +37,8 @@ def main():
 
     rc, branch, _ = run(["git", "branch", "--show-current"], repo)
     rc2, head, _ = run(["git", "rev-parse", "HEAD"], repo)
-    git_ok = rc == 0 and rc2 == 0
+    entries = read_status(repo)
+    git_ok = entries is not None
 
     # Keep audit transport state out of normal worktree status without changing committed .gitignore.
     if git_ok:
@@ -52,10 +57,10 @@ def main():
 
     status = diff = staged = untracked = ""
     if git_ok:
-        _, status, _ = run(["git", "status", "--porcelain=v1"], repo)
+        status = format_status(entries)
         _, diff, _ = run(["git", "diff", "--no-ext-diff", "--binary", "HEAD"], repo)
         _, staged, _ = run(["git", "diff", "--cached", "--no-ext-diff", "--binary", "HEAD"], repo)
-        _, untracked, _ = run(["git", "ls-files", "--others", "--exclude-standard"], repo)
+        untracked = "".join(json.dumps(e["path"], ensure_ascii=False) + "\n" for e in entries if e["status"] == "??")
 
     (baseline / "STATUS.txt").write_text(status, encoding="utf-8")
     (baseline / "DIFF.patch").write_text(diff, encoding="utf-8")
@@ -75,9 +80,9 @@ def main():
         })["task_spec_hash"],
         "git_available": git_ok,
         "branch": branch.strip() if git_ok else None,
-        "head": head.strip() if git_ok else None,
+        "head": head.strip() if rc2 == 0 else None,
         "worktree_was_dirty": bool(status.strip()) if git_ok else None,
-        "baseline_quality": "EARLY_INITIALIZATION",
+        "baseline_quality": args.baseline_quality,
         "max_audit_rounds": 3,
         "max_goal_iterations": 4,
         "max_evidence_expansion_rounds": 2,

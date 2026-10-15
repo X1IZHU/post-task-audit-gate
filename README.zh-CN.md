@@ -1,5 +1,7 @@
 # Post-task Audit Gate
 
+当前版本：**v0.2.0**。[更新内容](CHANGELOG.md) · [验证记录](docs/VALIDATION-v0.2.0.md)。
+
 让 Agent 完成任务后，自动组织一次基于证据的独立 ChatGPT 审计。
 
 [English](README.md) · [完整工作流](SKILL.md) · [真实案例](examples/evidence-expansion/README.md)
@@ -167,4 +169,4 @@ python3 -B -m unittest discover -s tests -v
 
 项目文件：`SKILL.md` 是工作流入口；`scripts/` 是本地辅助程序；`templates/` 是
 审计控制模板；`schema/` 提供结构说明；`docs/PROTOCOL.md` 解释协议；`tests/`
-验证本地机制。[本次发布验证记录](docs/VALIDATION.md)
+验证本地机制。[本次发布验证记录](docs/VALIDATION-v0.2.0.md)

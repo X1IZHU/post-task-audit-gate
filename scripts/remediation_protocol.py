@@ -388,12 +388,18 @@ def check_completion(
         errors.extend(audit_integrity.check_staleness(round_dir / "BUNDLE_COMPLETE.json", repo, task_file, None))
     previous_audit = round_dir / "PREVIOUS_AUDIT_RESPONSE.md"
     if previous_audit.is_file():
-        previous_master = round_dir / "PREVIOUS_REMEDIATION_MASTER_PROMPT.md"
-        report = round_dir / "REMEDIATION_REPORT.md"
-        if not previous_master.is_file() or not report.is_file():
-            errors.append("previous remediation round is missing bound Master Prompt or report")
-        else:
-            errors.extend(report_errors(report, previous_audit, previous_master))
+        previous_values, previous_errors = response_validator.exact_header(previous_audit.read_text(encoding="utf-8"))
+        errors.extend(f"previous audit: {error}" for error in previous_errors)
+        previous_verdict = previous_values.get("VERDICT")
+        if previous_verdict in {"FAIL", "PASS_WITH_NOTES"}:
+            previous_master = round_dir / "PREVIOUS_REMEDIATION_MASTER_PROMPT.md"
+            report = round_dir / "REMEDIATION_REPORT.md"
+            if not previous_master.is_file() or not report.is_file():
+                errors.append("previous remediation round is missing bound Master Prompt or report")
+            else:
+                errors.extend(report_errors(report, previous_audit, previous_master))
+        elif previous_verdict != "BLOCKED":
+            errors.append("previous audit has no supported continuation verdict")
     if int(values.get("ROUND", "0") or 0) > int(state.get("max_audit_rounds", 3)):
         errors.append("audit round budget exhausted")
     return sorted(set(errors))

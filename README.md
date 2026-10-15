@@ -1,5 +1,7 @@
 # Post-task Audit Gate
 
+Version: **v0.2.0**. [Changes](CHANGELOG.md) · [Validation](docs/VALIDATION-v0.2.0.md).
+
 Agent-run, evidence-based review of completed work with an independent ChatGPT auditor.
 
 [简体中文](README.zh-CN.md) · [Workflow](SKILL.md) · [Real example](examples/evidence-expansion/README.md)
@@ -189,4 +191,5 @@ python3 -B -m unittest discover -s tests -v
 Project map: `SKILL.md` is the agent entry point; `scripts/` contains local helpers;
 `templates/` contains audit controls; `schema/` describes data shapes;
 `docs/PROTOCOL.md` explains the protocol; `tests/` covers local mechanisms.
-See the [release validation record](docs/VALIDATION.md).
+See the [v0.2.0 validation record](docs/VALIDATION-v0.2.0.md); the
+[v0.1.0 record](docs/VALIDATION.md) is retained as history.

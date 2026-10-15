@@ -11,6 +11,8 @@ description: >-
   response, remediate any findings, and re-audit until PASS or the configured round limit.
   Also use the XHS_USER_PANEL profile when the user asks ChatGPT to independently simulate
   Xiaohongshu feed users reviewing a finished post; it is a reviewer, never a writer or publisher.
+metadata:
+  version: "0.2.0"
 ---
 
 # Post-Task ChatGPT Audit Gate
@@ -283,7 +285,7 @@ Record at minimum:
 - user's original task text or the most faithful available task specification;
 - current branch;
 - current `HEAD` commit if Git is available;
-- `git status --porcelain=v1`;
+- `git status --porcelain=v1 -z --untracked-files=all`, parsed as NUL-delimited records;
 - baseline tracked diff (`git diff --no-ext-diff --binary HEAD`) when feasible;
 - baseline staged diff (`git diff --cached --no-ext-diff --binary HEAD`) when feasible;
 - baseline untracked file list;
@@ -297,7 +299,12 @@ If the skill is first invoked only at the end and no baseline exists, continue u
 BASELINE_QUALITY: LATE_INITIALIZATION
 ```
 
-The auditor must be told that precise attribution of pre-existing dirty changes may be incomplete.
+Use `init_task.py --baseline-quality EARLY_INITIALIZATION` only when capture really
+precedes implementation, or `--baseline-quality LATE_INITIALIZATION` for late entry.
+Omitting the option records `UNKNOWN`; worktree dirtiness does not decide capture
+timing. The bundle includes `BASELINE_QUALITY.txt`. The auditor must be told that
+precise attribution of pre-existing dirty changes may be incomplete for late or
+unknown baselines.
 
 ---
 
@@ -443,6 +450,13 @@ Never omit a changed file solely because it weakens the implementation claim; if
 
 Include text snapshots of changed files when safe and reasonably sized. This is important because a web ChatGPT audit cannot assume arbitrary access to the local repository.
 
+The helper expands untracked directories into individual files and parses Git's
+NUL-delimited status, including separate current/original rename paths. Never parse
+Git display quoting or split paths on arrows/newlines. Use literal pathspecs for
+diffs. Gathering evidence must not stage or commit project changes. Use the Git
+worktree root as `--repo`. Private `.codex-audit/` state is excluded from source
+snapshots; resolved links cannot escape the repository or bypass sensitive paths.
+
 For each text file in scope:
 
 - preserve its relative repository path under `CHANGED_FILES/`;
@@ -463,6 +477,13 @@ For every evidence file, include:
 - SHA-256 where available;
 - whether complete/truncated/redacted/omitted;
 - omission reason.
+
+Manifest status is explicit: `COMPLETE` / `SPLIT_COMPLETE`, `DELETED` (Git-confirmed
+missing file), `OMITTED_SENSITIVE`, `OMITTED_BINARY`, `OMITTED_TOO_LARGE`, or
+`DENIED_PATH`. An unexpectedly missing or unreadable required file is `READ_ERROR`,
+not a deletion or binary omission. A non-file candidate is `UNSUPPORTED`. These last
+two failures leave a diagnostic staging manifest and prevent a completed ZIP or
+`BUNDLE_COMPLETE.json`. Deliberate omissions still require auditor review if material.
 
 The auditor must be able to detect incomplete evidence.
 
@@ -1020,7 +1041,11 @@ reject a missing or structurally incomplete `REMEDIATION_REPORT.md` before writi
 complete bundle. Every prior actionable finding needs a report section, and every CMD
 from a prior READY pack needs a command record (use `NOT_RUN` when preflight stopped
 execution). A `BLOCKED` evidence-expansion round may omit the report because no
-remediation should have occurred.
+remediation should have occurred. The final completion check follows the same
+rule: after prior `BLOCKED`, a valid subsequent exact `PASS` can close the gate
+without a code-remediation Master Prompt/report. Verified download, matching
+identity, valid bundle, current fingerprints, and prior-finding lineage are still
+required. Prior `FAIL` / `PASS_WITH_NOTES` still require the bound remediation files.
 
 Create a new re-audit round with:
 

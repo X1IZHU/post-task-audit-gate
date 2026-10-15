@@ -364,9 +364,40 @@ def bundle_entries(bundle: pathlib.Path) -> list[dict[str, Any]]:
 def write_bundle_hashes(bundle: pathlib.Path, manifest_hash: str) -> None:
     lines = []
     for path in sorted(p for p in bundle.rglob("*") if p.is_file() and p.name not in {"HASHES.sha256", "BUNDLE_COMPLETE.json"} | MUTABLE_CONTROL_FILES and not is_runtime_capture(p)):
-        lines.append(f"{sha256_file(path)}  {path.relative_to(bundle).as_posix()}")
+        name = path.relative_to(bundle).as_posix()
+        # sha256sum-style escaping keeps a newline/backslash in a filename from
+        # becoming a second checksum record. Existing plain records stay valid.
+        escaped = any(char in name for char in "\\\n\r")
+        if escaped:
+            name = name.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
+        lines.append(("\\" if escaped else "") + f"{sha256_file(path)}  {name}")
     lines.append(f"# BUNDLE_MANIFEST_HASH {manifest_hash}")
     (bundle / "HASHES.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def parse_checksum_record(line: str) -> tuple[str, str]:
+    escaped = line.startswith("\\")
+    digest, separator, name = line.removeprefix("\\").partition("  ")
+    if not separator or not re.fullmatch(r"[a-f0-9]{64}", digest) or not name:
+        raise ValueError("invalid HASHES.sha256 record")
+    if escaped:
+        chars = []
+        index = 0
+        escapes = {"\\": "\\", "n": "\n", "r": "\r"}
+        while index < len(name):
+            if name[index] == "\\":
+                index += 1
+                if index == len(name) or name[index] not in escapes:
+                    raise ValueError("invalid HASHES.sha256 path escape")
+                chars.append(escapes[name[index]])
+            else:
+                chars.append(name[index])
+            index += 1
+        name = "".join(chars)
+    candidate = pathlib.Path(name)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError("invalid HASHES.sha256 path boundary")
+    return digest, name
 
 
 def validate_bundle(bundle: pathlib.Path) -> list[str]:
@@ -406,10 +437,14 @@ def validate_bundle(bundle: pathlib.Path) -> list[str]:
         errors.append("missing BUNDLE_COMPLETE.json")
     hashes_path = bundle / "HASHES.sha256"
     if hashes_path.is_file():
-        for line in hashes_path.read_text(encoding="utf-8").splitlines():
+        for line in hashes_path.read_text(encoding="utf-8").split("\n"):
             if not line or line.startswith("#"):
                 continue
-            digest, _, name = line.partition("  ")
+            try:
+                digest, name = parse_checksum_record(line)
+            except ValueError as exc:
+                errors.append(str(exc))
+                continue
             candidate = bundle / name
             if not candidate.is_file() or sha256_file(candidate) != digest:
                 errors.append(f"HASHES.sha256 mismatch: {name}")

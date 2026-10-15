@@ -110,3 +110,25 @@ override this. Return a complete LOW_CAPABILITY_EXECUTION_PROMPT with
 COMMAND_STATUS: NO_SAFE_COMMAND and STOP / MANUAL_REVIEW. Normal user-authorized
 Codex edits and independently reviewed local tests remain possible; they are not
 executions authorized by the audit pack. Record that distinction in the report.
+
+## v0.2.0 evidence collection and completion
+
+Git status is read once using NUL-delimited porcelain with all untracked files.
+Snapshots preserve individual paths and rename lineage without altering the index.
+The checksum list escapes backslash/newline/carriage-return paths using a leading
+backslash marker; existing ordinary records remain readable.
+
+`FILE_MANIFEST.json` distinguishes `DELETED` from `READ_ERROR`, deliberate omissions,
+and unsupported non-file candidates. Read errors and unsupported candidates stop
+bundle completion; diagnostic staging files remain local. Private audit state and
+resolved links outside the repository or into sensitive paths cannot become source
+snapshots. Material deliberate omissions still require evidence expansion or BLOCKED.
+
+Baseline capture defaults to `UNKNOWN`. Declare `EARLY_INITIALIZATION` or
+`LATE_INITIALIZATION` explicitly through `init_task.py --baseline-quality`; dirty
+status is independent. `BASELINE_QUALITY.txt` carries the declaration to the auditor.
+
+Completion after prior evidence-only `BLOCKED` does not require a remediation
+Master Prompt/report. Exact PASS, verified response download, identity, valid ZIP,
+current fingerprints and lineage remain required. Prior FAIL/PASS_WITH_NOTES still
+require the bound Master Prompt/report. Audit protocol version remains 1.

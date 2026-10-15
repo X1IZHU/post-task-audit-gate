@@ -39,13 +39,14 @@ from validate_audit_response import (
 from transport_policy import new_transport_state
 import audit_integrity
 import remediation_protocol
+from git_evidence import format_status, read_status
 
 SENSITIVE_NAMES = {
     ".env", ".npmrc", ".pypirc", "credentials", "credentials.json",
     "secrets.json", "id_rsa", "id_ed25519"
 }
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".kdbx"}
-SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build", ".next", ".cache"}
+SKIP_DIRS = {".git", ".codex-audit", "node_modules", ".venv", "venv", "dist", "build", ".next", ".cache"}
 MAX_TEXT = 1024 * 1024
 REMEDIATION_VERDICTS = {"FAIL", "PASS_WITH_NOTES"}
 XHS_PROFILE = "XHS_USER_PANEL"
@@ -57,7 +58,7 @@ REPORT_PROMPT_STATUSES = {"YES", "ADAPTED", "NO"}
 
 
 def run(cmd, cwd):
-    p = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, check=False)
+    p = subprocess.run(cmd, cwd=cwd, text=True, encoding="utf-8", errors="replace", capture_output=True, check=False)
     return p.returncode, p.stdout, p.stderr
 
 
@@ -83,6 +84,56 @@ def text_bytes(path):
         return b
     except Exception:
         return None
+
+
+def snapshot_entry(repo, out, rel, role, *, deleted=False, previous=None):
+    """Classify omissions separately from unexpected required-file failures."""
+    entry = {"repository_path": rel, "role": role}
+    if previous is not None:
+        entry["previous_repository_path"] = previous
+    candidate = pathlib.Path(rel)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        entry.update(status="DENIED_PATH", reason="outside repository boundary")
+        return entry, None
+    try:
+        source = (repo / candidate).resolve()
+        source_rel = source.relative_to(repo)
+    except (OSError, RuntimeError) as exc:
+        entry.update(status="READ_ERROR", reason=type(exc).__name__)
+        return entry, None
+    except ValueError:
+        entry.update(status="DENIED_PATH", reason="outside repository boundary")
+        return entry, None
+    if sensitive(candidate) or sensitive(source_rel) or (previous and sensitive(pathlib.Path(previous))):
+        entry.update(status="OMITTED_SENSITIVE", reason="sensitive path policy")
+        return entry, None
+    try:
+        if not source.exists():
+            entry.update(status="DELETED" if deleted else "READ_ERROR",
+                         reason="Git records deletion" if deleted else "expected file is missing")
+            return entry, None
+        if not source.is_file():
+            entry.update(status="UNSUPPORTED", reason="expected path is not a regular file")
+            return entry, None
+        content = source.read_bytes()
+    except OSError as exc:
+        entry.update(status="READ_ERROR", reason=type(exc).__name__)
+        return entry, None
+    entry.update(size=len(content), sha256=sha256_bytes(content))
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        entry.update(status="OMITTED_BINARY", reason="not UTF-8 text")
+        return entry, None
+    if len(content) > MAX_TEXT:
+        entry.update(status="OMITTED_TOO_LARGE", reason="text exceeds snapshot limit")
+        return entry, content
+    directory = "CHANGED_FILES" if role == "changed" else "REQUESTED_EVIDENCE"
+    dst = out / directory / candidate
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(content)
+    entry.update(status="COMPLETE", bundle_path=dst.relative_to(out).as_posix())
+    return entry, content
 
 
 def test_provenance_errors(path: pathlib.Path, repo: pathlib.Path, expected_fingerprint: str) -> list[str]:
@@ -239,9 +290,13 @@ def previous_round_errors(
     if not hashes.is_file():
         return errors + ["previous round is missing HASHES.sha256"]
     declared = set()
-    for line in hashes.read_text(encoding="utf-8").splitlines():
-        digest, sep, name = line.partition("  ")
-        if not sep or not name or line.startswith("#"):
+    for line in hashes.read_text(encoding="utf-8").split("\n"):
+        if not line or line.startswith("#"):
+            continue
+        try:
+            digest, name = audit_integrity.parse_checksum_record(line)
+        except ValueError as exc:
+            errors.append(f"previous round: {exc}")
             continue
         declared.add(name)
         candidate = round_dir / name
@@ -562,26 +617,31 @@ def main():
     base = audit_root / "baseline"
     if (base / "STATUS.txt").exists(): shutil.copy2(base / "STATUS.txt", out / "BASELINE_STATUS.txt")
 
-    rc, status, _ = run(["git", "status", "--porcelain=v1"], repo)
-    final_diff = ""
-    if rc == 0:
-        (out / "WORKTREE_STATUS.txt").write_text(status, encoding="utf-8")
-    else:
-        (out / "WORKTREE_STATUS.txt").write_text("Git unavailable\n", encoding="utf-8")
-    changed = []
-    if rc == 0:
-        rc3, names, _ = run(["git", "status", "--porcelain=v1"], repo)
-        if rc3 == 0:
-            for line in names.splitlines():
-                if len(line) < 4: continue
-                rel = line[3:]
-                if " -> " in rel: rel = rel.split(" -> ", 1)[1]
-                changed.append(rel)
-
-    safe_changed = [rel for rel in sorted(set(changed)) if not sensitive(pathlib.Path(rel))]
-    if rc == 0 and safe_changed:
-        rc2, final_diff, _ = run(["git", "diff", "--no-ext-diff", "--binary", "HEAD", "--", *safe_changed], repo)
-        (out / "FINAL_DIFF.patch").write_text(final_diff if rc2 == 0 else "Git diff unavailable\n", encoding="utf-8")
+    entries = read_status(repo)
+    (out / "WORKTREE_STATUS.txt").write_text(
+        format_status(entries) if entries is not None else "Git unavailable\n", encoding="utf-8")
+    baseline_quality = task.get("baseline_quality", "UNKNOWN")
+    if baseline_quality not in {"UNKNOWN", "EARLY_INITIALIZATION", "LATE_INITIALIZATION"}:
+        baseline_quality = "UNKNOWN"
+    (out / "BASELINE_QUALITY.txt").write_text(
+        f"BASELINE_QUALITY: {baseline_quality}\n"
+        "This is a declared capture time, not inferred from worktree dirtiness. "
+        "UNKNOWN/LATE cannot establish a clean pre-implementation baseline.\n", encoding="utf-8")
+    manifest = []
+    safe_changed = set()
+    for item in entries or []:
+        rel = item["path"]
+        entry, _ = snapshot_entry(repo, out, rel, "changed",
+                                  deleted="D" in item["status"], previous=item.get("previous_path"))
+        entry["git_status"] = item["status"]
+        manifest.append(entry)
+        if entry["status"] in {"COMPLETE", "DELETED", "OMITTED_BINARY", "OMITTED_TOO_LARGE"}:
+            safe_changed.add(rel)
+            if item.get("previous_path"):
+                safe_changed.add(item["previous_path"])
+    if entries is not None and safe_changed:
+        rc2, final_diff, _ = run(["git", "--literal-pathspecs", "diff", "--no-ext-diff", "--binary", "HEAD", "--", *sorted(safe_changed)], repo)
+        (out / "FINAL_DIFF.patch").write_text(final_diff if rc2 == 0 else "Git diff unavailable (for example, unborn HEAD). See file snapshots.\n", encoding="utf-8")
     else:
         (out / "FINAL_DIFF.patch").write_text("No safe tracked diff available. See FILE_MANIFEST.json and CHANGED_FILES.\n", encoding="utf-8")
 
@@ -591,29 +651,6 @@ def main():
         "Raw baseline diff retained locally under .codex-audit/baseline/DIFF.patch and not uploaded. "
         "Use BASELINE_STATUS.txt plus current safe evidence; if precise pre-existing content is material, "
         "prepare a separately redacted baseline excerpt.\n", encoding="utf-8")
-
-    manifest = []
-    for rel in sorted(set(changed)):
-        src = repo / rel
-        entry = {"repository_path": rel, "role": "changed"}
-        if sensitive(pathlib.Path(rel)):
-            entry.update({"status": "OMITTED_SENSITIVE", "reason": "sensitive path policy"})
-            manifest.append(entry); continue
-        if not src.exists() or not src.is_file():
-            entry.update({"status": "NOT_PRESENT", "reason": "deleted or non-file"})
-            manifest.append(entry); continue
-        b = text_bytes(src)
-        if b is None:
-            entry.update({"status": "OMITTED_BINARY", "size": src.stat().st_size})
-            manifest.append(entry); continue
-        if len(b) > MAX_TEXT:
-            entry.update({"status": "OMITTED_TOO_LARGE", "size": len(b), "sha256": sha256_bytes(b)})
-            manifest.append(entry); continue
-        dst = out / "CHANGED_FILES" / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(b)
-        entry.update({"status": "COMPLETE", "bundle_path": str(dst.relative_to(out)), "size": len(b), "sha256": sha256_bytes(b)})
-        manifest.append(entry)
 
     copy_round_lineage(out, args.previous_audit, args.remediation_report, previous_text, args.remediation_master_prompt)
 
@@ -649,37 +686,21 @@ def main():
     # Evidence expansion can add selected unchanged files without broadening the
     # raw bundle or allowing paths outside the repository.
     for requested in args.evidence_path or []:
+        entry, content = snapshot_entry(repo, out, requested, "evidence_request")
         candidate = pathlib.Path(requested)
-        if candidate.is_absolute() or ".." in candidate.parts:
-            manifest.append({"repository_path": requested, "role": "evidence_request", "status": "DENIED_PATH", "reason": "outside repository boundary"})
-            continue
-        source = (repo / candidate).resolve()
-        try:
-            source.relative_to(repo)
-        except ValueError:
-            manifest.append({"repository_path": requested, "role": "evidence_request", "status": "DENIED_PATH", "reason": "outside repository boundary"})
-            continue
-        entry = {"repository_path": candidate.as_posix(), "role": "evidence_request"}
-        if sensitive(candidate):
-            entry.update({"status": "OMITTED_SENSITIVE", "reason": "sensitive path policy"})
-        elif not source.is_file():
-            entry.update({"status": "NOT_PRESENT", "reason": "not a regular file"})
-        else:
-            content = text_bytes(source)
-            if content is None:
-                entry.update({"status": "OMITTED_BINARY", "size": source.stat().st_size})
-            elif len(content) > MAX_TEXT:
-                split_manifest, parts = write_split_evidence(out, candidate, content)
-                entry.update({"status": "SPLIT_COMPLETE", "size": len(content), "sha256": sha256_bytes(content), "split_manifest": split_manifest, "split_parts": parts})
-                changed_entry = next((item for item in manifest if item.get("repository_path") == candidate.as_posix() and item.get("role") == "changed"), None)
-                if changed_entry and changed_entry.get("status") == "OMITTED_TOO_LARGE":
-                    changed_entry.update({"status": "SPLIT_COMPLETE", "size": len(content), "sha256": sha256_bytes(content), "split_manifest": split_manifest, "split_parts": parts})
-            else:
-                destination = out / "REQUESTED_EVIDENCE" / candidate
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(content)
-                entry.update({"status": "COMPLETE", "bundle_path": str(destination.relative_to(out)), "size": len(content), "sha256": sha256_bytes(content)})
+        if entry["status"] == "OMITTED_TOO_LARGE":
+            split_manifest, parts = write_split_evidence(out, candidate, content)
+            entry.update(status="SPLIT_COMPLETE", split_manifest=split_manifest, split_parts=parts)
+            for changed_entry in manifest:
+                if changed_entry.get("repository_path") == candidate.as_posix() and changed_entry.get("status") == "OMITTED_TOO_LARGE":
+                    changed_entry.update(status="SPLIT_COMPLETE", split_manifest=split_manifest, split_parts=parts)
         manifest.append(entry)
+
+    (out / "FILE_MANIFEST.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    failures = [e for e in manifest if e["status"] in {"READ_ERROR", "UNSUPPORTED"}]
+    if failures:
+        raise ValueError("Required file evidence failed: " + "; ".join(
+            f"{e['status']}: {e['repository_path']} ({e['reason']})" for e in failures))
 
     # A census records repository visibility without uploading the repository source.
     write_census(repo, out / "REPOSITORY_CENSUS.jsonl")
@@ -694,7 +715,7 @@ def main():
     else:
         template_name = "initial-audit.md" if round_no == 1 else "remediation-verification.md"
     req = (skill_root / "templates" / template_name).read_text(encoding="utf-8")
-    warning = [e for e in manifest if e.get("status") not in {"COMPLETE", "SPLIT_COMPLETE"}]
+    warning = [e for e in manifest if e.get("status") not in {"COMPLETE", "SPLIT_COMPLETE", "DELETED"}]
     if warning:
         req += "\n\n## Evidence completeness warning\n\nSome changed-file snapshots were omitted. Review FILE_MANIFEST.json and return BLOCKED if the omitted evidence is material to correctness.\n"
     (out / "AUDIT_REQUEST.md").write_text(req, encoding="utf-8")

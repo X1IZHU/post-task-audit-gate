@@ -19,7 +19,7 @@ def main() -> None:
     source = pathlib.Path(__file__).resolve().parents[1]
     target = args.target.expanduser().absolute()
     required = ["SKILL.md", "EVIDENCE_POLICY.md", "scripts", "templates", "schema", "docs/PROTOCOL.md"]
-    optional = ["README.md", "README.zh-CN.md", "LICENSE", "NOTICE", "examples"]
+    optional = ["README.md", "README.zh-CN.md", "CHANGELOG.md", "LICENSE", "NOTICE", "examples"]
     selected = [source / item for item in required + optional if (source / item).exists()]
     missing = [item for item in required if not (source / item).exists()]
     if missing:

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.2.0 — 2026-10-15
+
+- Collect untracked nested files individually with NUL-delimited Git status; preserve
+  Unicode, spaces, quotes, arrows, newlines, and rename source/destination paths.
+  Keep index state unchanged and use literal pathspecs for filtered diffs.
+- Distinguish confirmed deletions, deliberate omissions and unexpected read failures.
+  Required read failures/unsupported non-file candidates prevent a completed bundle.
+  Keep private audit state and links to outside/sensitive targets out of snapshots.
+- Default baseline quality to `UNKNOWN`; accept explicit early/late capture declarations
+  and include the declaration in every handoff.
+- Allow evidence-only `BLOCKED` → `PASS` completion without code-remediation documents;
+  preserve the requirements for prior `FAIL` / `PASS_WITH_NOTES` and all identity,
+  transport, lineage and staleness checks.
+- Preserve plain checksum records; escape unusual filenames in `HASHES.sha256`.
+- Candidate fingerprint scope, runtime attestation, and Windows browser validation
+  are not redesigned or newly established by this release.
+
 ## v0.1.0 — 2026-10-14
 
 - Package the existing installed skill, helpers, templates, schemas, and tests in
